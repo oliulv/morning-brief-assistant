@@ -38,32 +38,49 @@ class Settings:
     debug_providers: bool
 
     @staticmethod
+    def _strip_env(key: str, default: str | None = None) -> str | None:
+        """Get env var and strip whitespace/newlines (common issue with GitHub secrets)."""
+        val = os.getenv(key)
+        if val is None:
+            return default
+        stripped = val.strip()
+        return stripped if stripped else default
+
+    @staticmethod
     def load() -> "Settings":
-        slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
-        slack_user_id = os.getenv("SLACK_USER_ID")
-        slack_fallback_channel = os.getenv("SLACK_FALLBACK_CHANNEL")
+        slack_bot_token = Settings._strip_env("SLACK_BOT_TOKEN")
+        slack_user_id = Settings._strip_env("SLACK_USER_ID")
+        slack_fallback_channel = Settings._strip_env("SLACK_FALLBACK_CHANNEL")
 
-        notion_api_key = os.getenv("NOTION_API_KEY")
-        notion_task_database_id = os.getenv("NOTION_TASK_DATABASE_ID")
+        notion_api_key = Settings._strip_env("NOTION_API_KEY")
+        notion_task_database_id = Settings._strip_env("NOTION_TASK_DATABASE_ID")
 
-        google_calendar_id = os.getenv("GOOGLE_CALENDAR_ID", "primary")
-        google_oauth_client_id = os.getenv("GOOGLE_OAUTH_CLIENT_ID")
-        google_oauth_client_secret = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET")
+        google_calendar_id = Settings._strip_env("GOOGLE_CALENDAR_ID") or "primary"
+        google_oauth_client_id = Settings._strip_env("GOOGLE_OAUTH_CLIENT_ID")
+        google_oauth_client_secret = Settings._strip_env("GOOGLE_OAUTH_CLIENT_SECRET")
 
-        gmail_query = os.getenv("GMAIL_QUERY", "label:INBOX newer_than:1d")
-        important_senders_str = os.getenv("IMPORTANT_SENDERS", "")
+        gmail_query = Settings._strip_env("GMAIL_QUERY") or "label:INBOX newer_than:1d"
+        important_senders_str = Settings._strip_env("IMPORTANT_SENDERS") or ""
         important_senders = [s.strip() for s in important_senders_str.split(",") if s.strip()]
-        gmail_max = int(os.getenv("GMAIL_MAX", "5"))
+        gmail_max_str = Settings._strip_env("GMAIL_MAX") or "5"
+        try:
+            gmail_max = int(gmail_max_str)
+        except ValueError:
+            gmail_max = 5
 
-        days_ahead = int(os.getenv("DAYS_AHEAD", "14"))
-        tz = os.getenv("TZ", "Europe/Oslo")
+        days_ahead_str = Settings._strip_env("DAYS_AHEAD") or "14"
+        try:
+            days_ahead = int(days_ahead_str)
+        except ValueError:
+            days_ahead = 14
+        tz = Settings._strip_env("TZ") or "Europe/Oslo"
 
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-        elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
-        elevenlabs_model_id = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
-        mock_elevenlabs = os.getenv("MOCK_ELEVENLABS", "false").lower() in {"1", "true", "yes"}
-        debug_providers = os.getenv("DEBUG_PROVIDERS", "false").lower() in {"1", "true", "yes"}
+        openai_api_key = Settings._strip_env("OPENAI_API_KEY")
+        elevenlabs_api_key = Settings._strip_env("ELEVENLABS_API_KEY")
+        elevenlabs_voice_id = Settings._strip_env("ELEVENLABS_VOICE_ID")
+        elevenlabs_model_id = Settings._strip_env("ELEVENLABS_MODEL_ID") or "eleven_multilingual_v2"
+        mock_elevenlabs = (Settings._strip_env("MOCK_ELEVENLABS") or "false").lower() in {"1", "true", "yes"}
+        debug_providers = (Settings._strip_env("DEBUG_PROVIDERS") or "false").lower() in {"1", "true", "yes"}
 
         return Settings(
             slack_bot_token=slack_bot_token,

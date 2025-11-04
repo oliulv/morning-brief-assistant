@@ -26,12 +26,23 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 DEFAULT_TZ = os.getenv("TZ", "Europe/Oslo")
 DEFAULT_NICKNAME = os.getenv("USER_NICKNAME", "GOAT")
-VOICE_MIN_SECS = int(os.getenv("VOICE_MIN_SECS", "45"))
-VOICE_MAX_SECS = int(os.getenv("VOICE_MAX_SECS", "70"))
+
+def _safe_int_env(key: str, default: int) -> int:
+    """Safely parse int from env var, handling empty strings."""
+    val = os.getenv(key, "").strip()
+    if not val:
+        return default
+    try:
+        return int(val)
+    except ValueError:
+        return default
+
+VOICE_MIN_SECS = _safe_int_env("VOICE_MIN_SECS", 45)
+VOICE_MAX_SECS = _safe_int_env("VOICE_MAX_SECS", 70)
 
 
 def _openai_client():
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         return None
     try:
@@ -148,10 +159,7 @@ LENGTH:
         "timezone": tz or DEFAULT_TZ,
         "today_events": today_events,
         "tasks_today": tasks_today,
-        "upcoming_events": upcoming_events,
-        "upcoming_tasks": upcoming_tasks,
         "emails_top": emails,
-        "slack_mentions_top": slack_mentions,
         "instructions": {
             "calendar": "Say 'Today you have…' then list briefly with 24-hour times and titles; include location/link only if useful.",
             "back_to_back": "If two events are adjacent or locations differ, suggest a short buffer.",
@@ -176,7 +184,7 @@ LENGTH:
 
             # Soft guardrail: if it looks way too long, lightly trim.
             # (ElevenLabs reads ~140–160 wpm; we aim ~120–180 words.)
-            max_chars = int(os.getenv("VOICE_MAX_CHARS", "1200"))  # ~150–180 words
+            max_chars = _safe_int_env("VOICE_MAX_CHARS", 1200)  # ~150–180 words
             if len(voice_text) > max_chars:
                 # Keep opening and final one-liner; trim middle
                 parts = voice_text.split(". ")

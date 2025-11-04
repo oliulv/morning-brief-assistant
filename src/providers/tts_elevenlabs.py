@@ -17,9 +17,9 @@ class ElevenTTS:
             self.model_id = model_id or os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
             self.client = None
         else:
-            self.api_key = api_key or os.getenv("ELEVENLABS_API_KEY")
-            self.voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID")
-            self.model_id = model_id or os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")
+            self.api_key = (api_key or os.getenv("ELEVENLABS_API_KEY") or "").strip()
+            self.voice_id = (voice_id or os.getenv("ELEVENLABS_VOICE_ID") or "").strip()
+            self.model_id = (model_id or os.getenv("ELEVENLABS_MODEL_ID") or "eleven_multilingual_v2").strip()
             if not self.api_key:
                 raise RuntimeError("Missing ELEVENLABS_API_KEY")
             if not self.voice_id:
