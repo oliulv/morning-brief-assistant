@@ -196,8 +196,9 @@ The workflow runs daily at 06:30 UTC (07:30 Europe/Oslo in winter).
    - `NOTION_API_KEY`
    - `NOTION_TASK_DATABASE_ID`
    - `GOOGLE_CALENDAR_ID`
-   - `GOOGLE_OAUTH_CLIENT_ID`
-   - `GOOGLE_OAUTH_CLIENT_SECRET`
+   - `GOOGLE_OAUTH_CLIENT_ID` (optional if using `client_secret.json`)
+   - `GOOGLE_OAUTH_CLIENT_SECRET` (optional if using `client_secret.json`)
+   - `GOOGLE_TOKEN_BASE64` (see detailed instructions below)
    - `GMAIL_QUERY` (optional)
    - `IMPORTANT_SENDERS` (optional)
    - `GMAIL_MAX` (optional)
@@ -212,18 +213,38 @@ The workflow runs daily at 06:30 UTC (07:30 Europe/Oslo in winter).
 
 ### Google OAuth in GitHub Actions
 
-For Google OAuth to work in GitHub Actions, you have two options:
+Since GitHub Actions can't do interactive OAuth authentication, you need to provide a pre-authenticated token:
 
-**Option 1: Upload token.json as a secret**
-1. Generate `token.json` locally (run the script once)
-2. Base64 encode it: `base64 token.json > token_base64.txt`
-3. Add the base64 string as a GitHub secret `GOOGLE_TOKEN_BASE64`
-4. Update the workflow to decode it: `echo "${{ secrets.GOOGLE_TOKEN_BASE64 }}" | base64 -d > token.json`
+**Step 1: Generate token.json locally**
+```bash
+python -m src.main
+```
+This will open a browser for OAuth and create `token.json` in your project root.
 
-**Option 2: Use a service account**
-- Create a service account in Google Cloud
-- Download the JSON key
-- Use it instead of OAuth (requires code changes)
+**Step 2: Encode token.json**
+On macOS/Linux:
+```bash
+base64 -i token.json
+```
+On Linux (alternative):
+```bash
+base64 token.json
+```
+
+Copy the entire output (it's one long string).
+
+**Step 3: Add as GitHub Secret**
+1. Go to your repo → **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**
+3. Name: `GOOGLE_TOKEN_BASE64`
+4. Value: Paste the entire base64 string you copied
+5. Click **Add secret**
+
+**Step 4: Done!**
+The workflow already includes a step to decode this automatically. No code changes needed.
+
+**Alternative: Service Account (Advanced)**
+If you prefer not to use OAuth tokens, you can create a service account in Google Cloud Console and use that instead (requires code modifications).
 
 ### Manual Trigger
 
