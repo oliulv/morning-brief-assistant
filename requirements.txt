@@ -1,0 +1,14 @@
+python-dotenv
+slack_sdk
+google-api-python-client
+google-auth
+google-auth-oauthlib
+notion-client
+pytz
+python-dateutil
+pydantic
+requests
+elevenlabs>=1.0.0
+openai>=1.59.0
+
+
