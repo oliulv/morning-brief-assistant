@@ -1,8 +1,9 @@
 name: Morning Brief
 
 on:
-  schedule:
-    - cron: '30 6 * * *'
+  # Schedule disabled to prevent automatic runs and save ElevenLabs credits
+  # schedule:
+  #   - cron: '30 6 * * *'
   workflow_dispatch:
 
 permissions:
