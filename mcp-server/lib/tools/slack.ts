@@ -151,40 +151,50 @@ export async function uploadFileToSlack(
 
     const uploadData = await uploadResponse.json();
 
+    // If uploadV2 fails for any reason, fallback to legacy files.upload
+    // uploadV2 might not be available for all workspaces
     if (!uploadData.ok) {
-      // If uploadV2 fails, try the legacy method as fallback
-      if (uploadData.error === 'method_not_supported' || uploadData.error === 'invalid_auth') {
-        // Fallback to legacy files.upload
-        const legacyFormData = new FormData();
-        legacyFormData.append('channels', channelId);
-        legacyFormData.append('file', new Blob([fileBytes]), args.filename);
-        legacyFormData.append('title', args.title || args.filename);
-        if (args.initial_comment) {
-          legacyFormData.append('initial_comment', args.initial_comment);
-        }
-
-        const legacyResponse = await fetch('https://slack.com/api/files.upload', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          body: legacyFormData,
-        });
-
-        const legacyData = await legacyResponse.json();
-        if (!legacyData.ok) {
-          throw new Error(`Slack API error: ${legacyData.error || 'Unknown error'}`);
-        }
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({ success: true, file_id: legacyData.file?.id }),
-            },
-          ],
-        };
+      // Fallback to legacy files.upload (even though deprecated, it still works)
+      const legacyFormData = new FormData();
+      legacyFormData.append('channels', channelId);
+      legacyFormData.append('file', new Blob([fileBytes]), args.filename);
+      legacyFormData.append('title', args.title || args.filename);
+      if (args.initial_comment) {
+        legacyFormData.append('initial_comment', args.initial_comment);
       }
-      throw new Error(`Slack API error: ${uploadData.error || 'Unknown error'}`);
+
+      const legacyResponse = await fetch('https://slack.com/api/files.upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: legacyFormData,
+      });
+
+      const legacyData = await legacyResponse.json();
+      if (!legacyData.ok) {
+        // Even if deprecated, it might still work - check if it's just a deprecation warning
+        if (legacyData.warning === 'method_deprecated' && legacyData.file) {
+          // It worked despite deprecation warning
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ success: true, file_id: legacyData.file.id }),
+              },
+            ],
+          };
+        }
+        throw new Error(`Slack API error: ${legacyData.error || 'Unknown error'}`);
+      }
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ success: true, file_id: legacyData.file?.id }),
+          },
+        ],
+      };
     }
 
     return {
