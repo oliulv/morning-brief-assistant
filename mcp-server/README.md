@@ -60,7 +60,68 @@ The MCP server will be available at `http://localhost:3000/api/mcp`
 
 ## Testing
 
-Use the MCP Inspector to test:
+### Option 1: Test Locally
+
+1. **Start the server:**
+   ```bash
+   npm run dev
+   ```
+
+2. **Test with curl:**
+   ```bash
+   # List available tools
+   curl -X POST http://localhost:3000/api/mcp \
+     -H "Content-Type: application/json" \
+     -d '{"method": "tools/list", "params": {}}'
+   
+   # Call a tool (example - requires env vars)
+   curl -X POST http://localhost:3000/api/mcp \
+     -H "Content-Type: application/json" \
+     -d '{
+       "method": "tools/call",
+       "params": {
+         "name": "get_calendar_events",
+         "arguments": {
+           "time_min": "2024-01-01T00:00:00Z",
+           "time_max": "2024-01-02T00:00:00Z"
+         }
+       }
+     }'
+   ```
+
+3. **Test with Node.js script:**
+   ```bash
+   node test-mcp.js
+   # Or test deployed version:
+   node test-mcp.js https://your-project.vercel.app/api/mcp
+   ```
+
+4. **Test with Python client:**
+   ```bash
+   # From project root
+   export MCP_SERVER_URL=http://localhost:3000/api/mcp
+   python test_mcp_client.py
+   ```
+
+### Option 2: Test Deployed Version
+
+1. **Get your Vercel URL** (e.g., `https://morning-brief-mcp-server.vercel.app`)
+
+2. **Test with curl:**
+   ```bash
+   curl -X POST https://your-project.vercel.app/api/mcp \
+     -H "Content-Type: application/json" \
+     -d '{"method": "tools/list", "params": {}}'
+   ```
+
+3. **Test with Python:**
+   ```bash
+   export MCP_SERVER_URL=https://your-project.vercel.app/api/mcp
+   python test_mcp_client.py
+   ```
+
+### Option 3: Use MCP Inspector (if available)
+
 ```bash
 npx @modelcontextprotocol/inspector@latest http://localhost:3000
 ```
