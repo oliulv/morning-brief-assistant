@@ -12,6 +12,8 @@ load_dotenv()
 
 @dataclass(frozen=True)
 class Settings:
+    mcp_server_url: str
+
     slack_bot_token: Optional[str]
     slack_user_id: Optional[str]
     slack_fallback_channel: Optional[str]
@@ -48,6 +50,10 @@ class Settings:
 
     @staticmethod
     def load() -> "Settings":
+        mcp_server_url = Settings._strip_env("MCP_SERVER_URL")
+        if not mcp_server_url:
+            raise ValueError("MCP_SERVER_URL environment variable is required")
+
         slack_bot_token = Settings._strip_env("SLACK_BOT_TOKEN")
         slack_user_id = Settings._strip_env("SLACK_USER_ID")
         slack_fallback_channel = Settings._strip_env("SLACK_FALLBACK_CHANNEL")
@@ -83,6 +89,7 @@ class Settings:
         debug_providers = (Settings._strip_env("DEBUG_PROVIDERS") or "false").lower() in {"1", "true", "yes"}
 
         return Settings(
+            mcp_server_url=mcp_server_url,
             slack_bot_token=slack_bot_token,
             slack_user_id=slack_user_id,
             slack_fallback_channel=slack_fallback_channel,
