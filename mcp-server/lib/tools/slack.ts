@@ -173,9 +173,10 @@ export async function uploadFileToSlack(
 
       const legacyData = await legacyResponse.json();
       if (!legacyData.ok) {
-        // Even if deprecated, it might still work - check if it's just a deprecation warning
-        if (legacyData.warning === 'method_deprecated' && legacyData.file) {
-          // It worked despite deprecation warning
+        // Even if deprecated, it might still work - check if file was uploaded despite error
+        // Slack may return method_deprecated as error but still upload the file
+        if ((legacyData.error === 'method_deprecated' || legacyData.warning === 'method_deprecated') && legacyData.file) {
+          // It worked despite deprecation warning/error
           return {
             content: [
               {
