@@ -128,16 +128,20 @@ export async function uploadFileToSlack(
     // Decode base64 file data in Node.js/Vercel
     const fileBytes = Uint8Array.from(atob(args.file_data), (c) => c.charCodeAt(0));
 
-    // Upload file using multipart form
+    // Use files.uploadV2 (newer API) or fall back to posting message with file
+    // files.upload is deprecated, so we'll use files.uploadV2
     const formData = new FormData();
-    formData.append('channels', channelId);
+    formData.append('channel_id', channelId);
     formData.append('file', new Blob([fileBytes]), args.filename);
-    formData.append('title', args.title || args.filename);
+    formData.append('filename', args.filename);
+    if (args.title) {
+      formData.append('title', args.title);
+    }
     if (args.initial_comment) {
       formData.append('initial_comment', args.initial_comment);
     }
 
-    const uploadResponse = await fetch('https://slack.com/api/files.upload', {
+    const uploadResponse = await fetch('https://slack.com/api/files.uploadV2', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -148,6 +152,38 @@ export async function uploadFileToSlack(
     const uploadData = await uploadResponse.json();
 
     if (!uploadData.ok) {
+      // If uploadV2 fails, try the legacy method as fallback
+      if (uploadData.error === 'method_not_supported' || uploadData.error === 'invalid_auth') {
+        // Fallback to legacy files.upload
+        const legacyFormData = new FormData();
+        legacyFormData.append('channels', channelId);
+        legacyFormData.append('file', new Blob([fileBytes]), args.filename);
+        legacyFormData.append('title', args.title || args.filename);
+        if (args.initial_comment) {
+          legacyFormData.append('initial_comment', args.initial_comment);
+        }
+
+        const legacyResponse = await fetch('https://slack.com/api/files.upload', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: legacyFormData,
+        });
+
+        const legacyData = await legacyResponse.json();
+        if (!legacyData.ok) {
+          throw new Error(`Slack API error: ${legacyData.error || 'Unknown error'}`);
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ success: true, file_id: legacyData.file?.id }),
+            },
+          ],
+        };
+      }
       throw new Error(`Slack API error: ${uploadData.error || 'Unknown error'}`);
     }
 
@@ -155,7 +191,7 @@ export async function uploadFileToSlack(
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ success: true, file_id: uploadData.file?.id }),
+          text: JSON.stringify({ success: true, file_id: uploadData.file?.id || uploadData.id }),
         },
       ],
     };

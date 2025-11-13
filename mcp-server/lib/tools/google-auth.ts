@@ -31,8 +31,12 @@ export async function getGoogleAccessToken(env: Env): Promise<string> {
     // Always try to refresh if we have a refresh_token (tokens expire after 1 hour)
     // This ensures we always use a fresh token
     if (tokenJson.refresh_token && (isExpired || !accessToken)) {
-      if (!env.GOOGLE_OAUTH_CLIENT_ID || !env.GOOGLE_OAUTH_CLIENT_SECRET) {
-        throw new Error('GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are required for token refresh');
+      // Use env vars if available, otherwise fall back to values from token.json
+      const clientId = env.GOOGLE_OAUTH_CLIENT_ID || tokenJson.client_id;
+      const clientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET || tokenJson.client_secret;
+      
+      if (!clientId || !clientSecret) {
+        throw new Error('GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are required for token refresh (set in Vercel env vars or include in token.json)');
       }
       
       // Refresh token using OAuth2 client
@@ -40,8 +44,8 @@ export async function getGoogleAccessToken(env: Env): Promise<string> {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          client_id: env.GOOGLE_OAUTH_CLIENT_ID,
-          client_secret: env.GOOGLE_OAUTH_CLIENT_SECRET,
+          client_id: clientId,
+          client_secret: clientSecret,
           refresh_token: tokenJson.refresh_token,
           grant_type: 'refresh_token',
         }),
