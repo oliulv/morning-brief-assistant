@@ -39,6 +39,8 @@ export async function synthesizeSpeech(
           similarity_boost: 0.75,
         },
       }),
+      // Increase timeout for longer audio generation
+      signal: AbortSignal.timeout(30000), // 30 second timeout
     });
 
     if (!response.ok) {
@@ -48,16 +50,9 @@ export async function synthesizeSpeech(
 
     const audioBuffer = await response.arrayBuffer();
     // Convert ArrayBuffer to base64 in Node.js/Vercel
-    // Use chunked approach for large files
-    const bytes = new Uint8Array(audioBuffer);
-    let binary = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      binary += String.fromCharCode(...chunk);
-    }
-    // Use btoa for base64 encoding (available in Node.js 16+)
-    const base64Audio = btoa(binary);
+    // For large files, use Buffer (more efficient than manual chunking)
+    const buffer = Buffer.from(audioBuffer);
+    const base64Audio = buffer.toString('base64');
 
     return {
       content: [
