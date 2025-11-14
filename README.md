@@ -1,6 +1,6 @@
 # Morning Brief Assistant
 
-A production-ready Python tool that sends you a concise, friendly Slack DM every morning at 07:30 Europe/Oslo with:
+A production-ready personal assistant that sends you a concise, friendly Slack DM every morning with:
 
 - **Today's agenda** from Google Calendar
 - **Notion tasks** due today (grouped by Area)
@@ -9,26 +9,118 @@ A production-ready Python tool that sends you a concise, friendly Slack DM every
 
 The brief includes both a text summary and an audio voice note (MP3) attached to the same Slack message. Tasks are automatically grouped by their Area relation property, and the voice note uses OpenAI to create a natural, conversational script.
 
+## Architecture
+
+This project uses a **Model Context Protocol (MCP)** server architecture:
+
+```
+┌─────────────────────┐
+│   Python Client     │  ← Runs daily via GitHub Actions
+│   (main.py)         │  ← Orchestrates the morning brief
+└──────────┬──────────┘
+           │
+           │ HTTP (MCP Protocol)
+           │
+┌──────────▼──────────┐
+│   MCP Server        │  ← Hosted on Vercel
+│   (Next.js/TS)      │  ← Provides tools via HTTP API
+│                     │
+│   Tools:            │
+│   • Google Calendar │
+│   • Gmail           │
+│   • Notion          │
+│   • OpenAI          │
+│   • ElevenLabs      │
+│   • Slack           │
+└─────────────────────┘
+```
+
+**Why MCP?**
+- **Separation of concerns**: Client orchestrates, server handles API integrations
+- **Reusability**: MCP server tools can be used by other clients
+- **Scalability**: Server deployed to Vercel with auto-scaling
+- **Maintainability**: Tools are independently testable and deployable
+
 ## Features
 
 - **Defensive**: If any provider fails, a partial brief is still delivered
 - **Voice note**: Optional ElevenLabs TTS with OpenAI-generated natural script
 - **Task grouping**: Automatically groups Notion tasks by Area
 - **Thread-aware**: Gmail counts threads, not individual messages
-- **OAuth**: Google credentials persisted in `token.json`
+- **OAuth**: Google credentials persisted securely
 - **Timezone-aware**: Default `Europe/Oslo` (configurable)
 - **Scheduled**: GitHub Actions runs daily at 06:30 UTC → 07:30 Europe/Oslo (winter)
+- **MCP Protocol**: Uses standardized Model Context Protocol for tool access
 
 ## Requirements
 
+### For Python Client
 - Python 3.11+
-- Slack app with bot token
-- Google API project with Calendar and Gmail enabled
-- Notion integration with access to your tasks database (and Areas database for task grouping)
-- (Optional) ElevenLabs account for voice notes
-- (Optional) OpenAI API key for natural voice script generation
+- Access to deployed MCP server (or run locally)
 
-## Installation
+### For MCP Server Deployment
+- Node.js 18+
+- Vercel account (free tier works)
+- API keys for:
+  - Slack (bot token)
+  - Google (OAuth credentials)
+  - Notion (integration token)
+  - ElevenLabs (optional, for voice)
+  - OpenAI (optional, for voice script)
+
+## Quick Start
+
+### 1. Deploy MCP Server to Vercel
+
+The MCP server must be deployed first, as the Python client connects to it.
+
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Navigate to MCP server directory
+cd mcp-server
+
+# Install dependencies
+npm install
+
+# Deploy to Vercel (follow prompts)
+npx vercel
+```
+
+During deployment, Vercel will ask for your project name and settings. After deployment, you'll get a URL like:
+```
+https://your-project.vercel.app
+```
+
+**Set environment variables in Vercel:**
+1. Go to your Vercel dashboard
+2. Select your project → **Settings** → **Environment Variables**
+3. Add the following variables (see [MCP Server Environment Variables](#mcp-server-environment-variables) section):
+
+Required:
+- `SLACK_BOT_TOKEN`
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `GOOGLE_TOKEN_BASE64`
+- `NOTION_API_KEY`
+
+Optional (but recommended):
+- `SLACK_USER_ID`
+- `SLACK_FALLBACK_CHANNEL`
+- `GOOGLE_CALENDAR_ID`
+- `NOTION_TASK_DATABASE_ID`
+- `OPENAI_API_KEY`
+- `ELEVENLABS_API_KEY`
+- `ELEVENLABS_VOICE_ID`
+- And others (see full list below)
+
+4. Redeploy after adding environment variables:
+```bash
+npx vercel --prod
+```
+
+### 2. Set Up Python Client
 
 ```bash
 # Clone the repository
@@ -43,271 +135,414 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Environment Variables
+### 3. Configure Environment Variables
 
-Copy `.env.example` to `.env` and fill in your values:
+Copy `.env.example` to `.env` and set:
 
-### Required
+```bash
+# MCP Server URL (your deployed Vercel URL)
+MCP_SERVER_URL=https://your-project.vercel.app/api/mcp
 
-- `SLACK_BOT_TOKEN` - Your Slack bot token (starts with `xoxb-`)
-- `SLACK_USER_ID` - Your Slack user ID (the recipient of the DM)
-- `SLACK_FALLBACK_CHANNEL` - Channel to post to if DM fails (e.g., `#daily-brief`)
-- `NOTION_API_KEY` - Your Notion integration secret
-- `NOTION_TASK_DATABASE_ID` - The database ID of your tasks database
-- `GOOGLE_CALENDAR_ID` - Your Google Calendar ID (default: `primary`)
+# Your Slack user ID (for receiving DMs)
+SLACK_USER_ID=U123456789
 
-### Optional (Google OAuth)
+# Optional: Override server-side settings
+SLACK_FALLBACK_CHANNEL=#daily-brief
+TZ=Europe/Oslo
+```
 
-If you use `client_secret.json` file, you can skip these:
-- `GOOGLE_OAUTH_CLIENT_ID` - Google OAuth client ID
-- `GOOGLE_OAUTH_CLIENT_SECRET` - Google OAuth client secret
+### 4. Run Locally
 
-### Optional (Gmail)
+```bash
+python -m src.main
+```
 
-- `GMAIL_QUERY` - Gmail search query (default: `label:INBOX newer_than:1d`)
-- `IMPORTANT_SENDERS` - Comma-separated list of important email addresses (optional)
-- `GMAIL_MAX` - Maximum number of email threads to include (default: `5`)
+The client will:
+1. Connect to your MCP server
+2. Fetch calendar, email, and task data via MCP tools
+3. Generate summary and voice note
+4. Send to your Slack DM
 
-### Optional (Notion)
+## Detailed Setup
 
-- `NOTION_DONE_VALUES` - Comma-separated values for "done" status (default: `Done,Completed,Finished,Closed`)
+### MCP Server Environment Variables
 
-### Optional (General)
+Add these to your Vercel project:
 
-- `DAYS_AHEAD` - Days to look ahead (default: `14`, not currently used)
+#### Required
+
+**Slack:**
+- `SLACK_BOT_TOKEN` - Bot token from Slack (starts with `xoxb-`)
+
+**Google:**
+- `GOOGLE_OAUTH_CLIENT_ID` - OAuth client ID from Google Cloud Console
+- `GOOGLE_OAUTH_CLIENT_SECRET` - OAuth client secret
+- `GOOGLE_TOKEN_BASE64` - Base64-encoded `token.json` (see [Google OAuth Setup](#google-oauth-setup))
+
+**Notion:**
+- `NOTION_API_KEY` - Integration secret from Notion
+
+#### Optional
+
+**Slack:**
+- `SLACK_USER_ID` - Your Slack user ID (for DMs)
+- `SLACK_FALLBACK_CHANNEL` - Channel if DM fails (e.g., `general` or `#daily-brief`)
+
+**Google:**
+- `GOOGLE_CALENDAR_ID` - Calendar ID (default: `primary`)
+
+**Gmail:**
+- `GMAIL_QUERY` - Search query (default: `label:INBOX newer_than:1d`)
+- `IMPORTANT_SENDERS` - Comma-separated important email addresses
+- `GMAIL_MAX` - Max emails to show (default: `5`)
+
+**Notion:**
+- `NOTION_TASK_DATABASE_ID` - Your tasks database ID
+- `NOTION_DONE_VALUES` - Comma-separated "done" status values (default: `Done,Completed,Finished,Closed`)
+
+**General:**
+- `DAYS_AHEAD` - Days to look ahead (default: `14`)
 - `TZ` - Timezone (default: `Europe/Oslo`)
 
-### Optional (OpenAI - for voice script)
-
-- `OPENAI_API_KEY` - Your OpenAI API key
+**OpenAI (for voice script):**
+- `OPENAI_API_KEY` - OpenAI API key
 - `OPENAI_MODEL` - Model to use (default: `gpt-4o-mini`)
 
-### Optional (ElevenLabs - for voice note)
+**ElevenLabs (for voice note):**
+- `ELEVENLABS_API_KEY` - ElevenLabs API key
+- `ELEVENLABS_VOICE_ID` - Voice ID
+- `ELEVENLABS_MODEL_ID` - Model (default: `eleven_multilingual_v2`)
 
-- `ELEVENLABS_API_KEY` - Your ElevenLabs API key
-- `ELEVENLABS_VOICE_ID` - The voice ID to use
-- `ELEVENLABS_MODEL_ID` - Model to use (default: `eleven_multilingual_v2`)
-- `VOICE_MIN_SECS` - Minimum voice note length in seconds (default: `45`)
-- `VOICE_MAX_SECS` - Maximum voice note length in seconds (default: `70`)
-- `MOCK_ELEVENLABS` - Set to `true` to skip ElevenLabs API calls (saves credits during testing)
+### Python Client Environment Variables
 
-## Setup Instructions
+Create a `.env` file in the project root:
+
+```bash
+# MCP Server URL (required)
+MCP_SERVER_URL=https://your-project.vercel.app/api/mcp
+
+# Slack (optional - overrides server defaults)
+SLACK_USER_ID=U123456789
+SLACK_FALLBACK_CHANNEL=#daily-brief
+
+# Timezone (optional - overrides server default)
+TZ=Europe/Oslo
+
+# OpenAI/ElevenLabs (optional - for local testing)
+OPENAI_API_KEY=sk-...
+ELEVENLABS_API_KEY=...
+ELEVENLABS_VOICE_ID=...
+ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+
+# Mock mode (optional - for testing without API calls)
+MOCK_ELEVENLABS=true
+```
+
+## API Setup Guides
 
 ### Google OAuth Setup
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or select existing)
-3. Enable **Calendar API** and **Gmail API**
-4. Go to "Credentials" → "Create Credentials" → "OAuth client ID"
-5. Choose "Desktop app" as the application type
-6. Download the credentials file and save it as `client_secret.json` in the project root
-   - OR set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` in `.env`
-7. On first run, a browser will open for OAuth authentication
-8. After authentication, `token.json` will be created (keep this file secure)
+2. Create a new project or select existing
+3. Enable **Google Calendar API** and **Gmail API**
+4. Go to **Credentials** → **Create Credentials** → **OAuth client ID**
+5. Choose **Desktop app** as application type
+6. Download `client_secret.json`
 
-**Note**: For GitHub Actions, you'll need to upload `token.json` as a secret or use a service account.
+**Generate token.json:**
+```bash
+# Run locally to trigger OAuth flow
+python -m src.main
+```
+This opens a browser for authentication and creates `token.json`.
+
+**Encode for Vercel:**
+```bash
+# On macOS/Linux
+base64 -i token.json
+
+# Copy the output and add as GOOGLE_TOKEN_BASE64 in Vercel
+```
+
+**Also add to Vercel:**
+- Extract `client_id` from `client_secret.json` → `GOOGLE_OAUTH_CLIENT_ID`
+- Extract `client_secret` from `client_secret.json` → `GOOGLE_OAUTH_CLIENT_SECRET`
 
 ### Slack Setup
 
-1. Go to [Slack API](https://api.slack.com/apps) and create a new app
-2. Install the app to your workspace
-3. Go to "OAuth & Permissions"
-4. Add the following **Bot Token Scopes**:
+1. Go to [Slack API](https://api.slack.com/apps) → **Create New App**
+2. Choose **From scratch**, name it, select workspace
+3. Go to **OAuth & Permissions**
+4. Add **Bot Token Scopes**:
    - `chat:write` - Send messages
-   - `im:write` - Send direct messages
-   - `files:write` - Upload files (for audio attachment)
+   - `im:write` - Send DMs
+   - `files:write` - Upload files (for audio)
    - `users:read` - Read user info
-5. Copy the **Bot User OAuth Token** (starts with `xoxb-`) to `SLACK_BOT_TOKEN`
-6. Find your Slack user ID:
-   - Right-click your profile in Slack → "Copy member ID"
-   - Or use the Slack API: `curl https://slack.com/api/auth.test -H "Authorization: Bearer YOUR_TOKEN"`
-   - Set this as `SLACK_USER_ID`
+5. Click **Install to Workspace**
+6. Copy **Bot User OAuth Token** → `SLACK_BOT_TOKEN`
+
+**Find your Slack user ID:**
+- Right-click your profile → **Copy member ID**
+- Or: `curl https://slack.com/api/auth.test -H "Authorization: Bearer YOUR_BOT_TOKEN"`
+- Set as `SLACK_USER_ID`
 
 ### Notion Setup
 
 1. Go to [Notion Integrations](https://www.notion.so/my-integrations)
-2. Click "New integration"
-3. Give it a name (e.g., "Morning Brief Assistant")
-4. Copy the **Internal Integration Token** to `NOTION_API_KEY`
-5. Open your tasks database in Notion
-6. Click "..." in the top right → "Add connections" → Select your integration
-7. Copy the database ID from the URL:
-   - URL format: `https://www.notion.so/YOUR-WORKSPACE/DATABASE_ID?v=...`
-   - The database ID is the long string before the `?`
-   - Set this as `NOTION_TASK_DATABASE_ID`
+2. Click **New integration**
+3. Name it (e.g., "Morning Brief Assistant")
+4. Copy **Internal Integration Token** → `NOTION_API_KEY`
 
-**For Area grouping to work:**
-8. Open your Areas database in Notion
-9. Click "..." → "Add connections" → Select your integration
-10. This allows the bot to fetch Area names for task grouping
+**Connect to databases:**
+5. Open your **Tasks database** in Notion
+6. Click **•••** → **Add connections** → Select your integration
+7. Copy database ID from URL:
+   ```
+   https://www.notion.so/YOUR-WORKSPACE/DATABASE_ID?v=...
+   ```
+   Set as `NOTION_TASK_DATABASE_ID`
 
-**Optional**: If your "Done" status uses different values, set `NOTION_DONE_VALUES` (comma-separated).
+8. **For Area grouping**: Repeat step 6 for your **Areas database**
 
-### ElevenLabs Audio Setup
+### ElevenLabs Setup (Optional)
 
-1. Create an account at [ElevenLabs](https://elevenlabs.io)
-2. Go to "Profile → API Keys" → Create a new API key
-3. Copy the key to `ELEVENLABS_API_KEY`
-4. Go to "Voice Lab" or browse stock voices
-5. Copy a voice ID to `ELEVENLABS_VOICE_ID`
-6. Set `ELEVENLABS_MODEL_ID` (default: `eleven_multilingual_v2`)
+1. Create account at [ElevenLabs](https://elevenlabs.io)
+2. Go to **Profile** → **API Keys** → Create key
+3. Copy key → `ELEVENLABS_API_KEY`
+4. Browse voices, copy a voice ID → `ELEVENLABS_VOICE_ID`
 
-**For testing without using credits:**
-- Set `MOCK_ELEVENLABS=true` in `.env`
+**Testing without credits:**
+Set `MOCK_ELEVENLABS=true` in your `.env`
 
 ### OpenAI Setup (Optional but Recommended)
 
-1. Get an API key from [OpenAI](https://platform.openai.com/api-keys)
-2. Set `OPENAI_API_KEY` in `.env`
-3. Optionally set `OPENAI_MODEL` (default: `gpt-4o-mini`)
+1. Get API key from [OpenAI](https://platform.openai.com/api-keys)
+2. Copy key → `OPENAI_API_KEY`
+3. Optionally set model → `OPENAI_MODEL` (default: `gpt-4o-mini`)
 
-OpenAI is used to generate a natural, conversational voice script from structured data. Without it, the voice note will use the raw text summary.
-
-## Local Run
-
-```bash
-python -m src.main
-```
-
-This will:
-- Fetch today's calendar events
-- Fetch today's Notion tasks (grouped by Area)
-- Fetch today's important emails
-- Generate a text summary
-- (If OpenAI configured) Generate a natural voice script
-- (If ElevenLabs configured) Generate an MP3 audio file
-- Send both to your Slack DM
-
-The summary is also printed to stdout for debugging.
+OpenAI generates natural, conversational voice scripts. Without it, voice uses the raw text summary.
 
 ## GitHub Actions Setup
 
-The workflow runs daily at 06:30 UTC (07:30 Europe/Oslo in winter).
+The workflow runs daily at 06:30 UTC.
 
-### Setting up GitHub Secrets
+### Configure GitHub Secrets
 
-1. Go to your GitHub repository
-2. Navigate to **Settings** → **Secrets and variables** → **Actions**
-3. Click **New repository secret**
-4. Add each environment variable from your `.env` file as a secret:
-   - `SLACK_BOT_TOKEN`
+1. Go to your repo → **Settings** → **Secrets and variables** → **Actions**
+2. Add **Repository secret**:
+   - Name: `MCP_SERVER_URL`
+   - Value: `https://your-project.vercel.app/api/mcp`
+
+3. Optionally add client-side overrides:
    - `SLACK_USER_ID`
    - `SLACK_FALLBACK_CHANNEL`
-   - `NOTION_API_KEY`
-   - `NOTION_TASK_DATABASE_ID`
-   - `GOOGLE_CALENDAR_ID`
-   - `GOOGLE_OAUTH_CLIENT_ID` (optional if using `client_secret.json`)
-   - `GOOGLE_OAUTH_CLIENT_SECRET` (optional if using `client_secret.json`)
-   - `GOOGLE_TOKEN_BASE64` (see detailed instructions below)
-   - `GMAIL_QUERY` (optional)
-   - `IMPORTANT_SENDERS` (optional)
-   - `GMAIL_MAX` (optional)
-   - `OPENAI_API_KEY` (optional)
-   - `OPENAI_MODEL` (optional)
-   - `ELEVENLABS_API_KEY` (optional)
-   - `ELEVENLABS_VOICE_ID` (optional)
-   - `ELEVENLABS_MODEL_ID` (optional)
-   - `VOICE_MIN_SECS` (optional)
-   - `VOICE_MAX_SECS` (optional)
-   - `TZ` (optional, default: `Europe/Oslo`)
+   - `TZ`
 
-### Google OAuth in GitHub Actions
-
-Since GitHub Actions can't do interactive OAuth authentication, you need to provide a pre-authenticated token:
-
-**Step 1: Generate token.json locally**
-```bash
-python -m src.main
-```
-This will open a browser for OAuth and create `token.json` in your project root.
-
-**Step 2: Encode token.json**
-On macOS/Linux:
-```bash
-base64 -i token.json
-```
-On Linux (alternative):
-```bash
-base64 token.json
-```
-
-Copy the entire output (it's one long string).
-
-**Step 3: Add as GitHub Secret**
-1. Go to your repo → **Settings** → **Secrets and variables** → **Actions**
-2. Click **New repository secret**
-3. Name: `GOOGLE_TOKEN_BASE64`
-4. Value: Paste the entire base64 string you copied
-5. Click **Add secret**
-
-**Step 4: Done!**
-The workflow already includes a step to decode this automatically. No code changes needed.
-
-**Alternative: Service Account (Advanced)**
-If you prefer not to use OAuth tokens, you can create a service account in Google Cloud Console and use that instead (requires code modifications).
+**Note:** Most configuration is in Vercel environment variables, so you only need to add the MCP server URL to GitHub.
 
 ### Manual Trigger
 
-You can also trigger the workflow manually:
-1. Go to **Actions** tab in GitHub
-2. Select "Morning Brief" workflow
-3. Click **Run workflow** → **Run workflow**
+1. Go to **Actions** tab
+2. Select **Morning Brief** workflow
+3. Click **Run workflow**
+
+## Local Development
+
+### Run MCP Server Locally
+
+```bash
+cd mcp-server
+npm install
+npm run dev
+```
+
+Server runs on `http://localhost:3000`
+
+Set in `.env`:
+```bash
+MCP_SERVER_URL=http://localhost:3000/api/mcp
+```
+
+### Test MCP Server
+
+```bash
+cd mcp-server
+node test-mcp.js
+```
+
+Or:
+```bash
+bash test-mcp.sh
+```
+
+### Run Python Client
+
+```bash
+python -m src.main
+```
+
+Or test full flow:
+```bash
+python test_full_flow.py
+```
 
 ## Troubleshooting
 
-### Notion tasks not showing up
-- Ensure your integration has access to the Tasks database
-- Check that tasks have due dates set
+### MCP Server Issues
+
+**500 Internal Server Error:**
+- Check Vercel logs: Dashboard → Deployment → View Function Logs
+- Verify all required environment variables are set
+- Check API keys are valid
+
+**404 Not Found:**
+- Verify URL is `https://your-project.vercel.app/api/mcp` (not `/api/mcp/route`)
+- Check Vercel deployment succeeded
+
+**Authentication errors:**
+- Re-encode `token.json` and update `GOOGLE_TOKEN_BASE64`
+- Verify OAuth client credentials match `token.json`
+
+### Slack Upload Issues
+
+**File upload fails:**
+- Ensure `files:write` scope is added to your Slack bot
+- Check `SLACK_BOT_TOKEN` is valid and starts with `xoxb-`
+- Verify Slack user ID is correct
+
+### Notion Issues
+
+**Tasks not showing:**
+- Ensure integration connected to Tasks database
 - Verify `NOTION_TASK_DATABASE_ID` is correct
-- Check logs for property detection issues
+- Check tasks have due dates
 
-### Notion Area not grouping
-- Ensure your integration has access to the **Areas database**
-- Share the Areas database with your integration (same as Tasks database)
-- Check that tasks have Area relations assigned in Notion
+**Areas not grouping:**
+- Connect integration to Areas database (same as Tasks)
+- Verify tasks have Area relations in Notion
 
-### Gmail only showing 1 email
-- Check `IMPORTANT_SENDERS` - if set but empty, it may filter emails
-- Leave `IMPORTANT_SENDERS` empty to show all emails
-- The bot counts **threads**, not individual messages
+### Gmail Issues
 
-### Google OAuth keeps asking for login
-- Ensure `client_secret.json` is a "Desktop app" type (not "Web application")
-- Check that `token.json` is being created and persisted
-- Verify file permissions on `token.json`
+**Only showing 1 email:**
+- Check `IMPORTANT_SENDERS` - empty string filters all emails
+- Bot counts threads, not individual messages
+- Adjust `GMAIL_QUERY` to broaden search
 
-### ElevenLabs not working
-- Check API key and voice ID are correct
-- Verify you have credits in your ElevenLabs account
-- Set `MOCK_ELEVENLABS=true` to test without API calls
-- Check logs for specific error messages
+### ElevenLabs Issues
 
-### Voice note too slow/fast
-- The bot uses ElevenLabs `speed` parameter (if supported) or adjusts `stability` in voice_settings
-- Text preprocessing removes pauses (slashes, arrows → commas)
-- Adjust `stability` in code if needed (lower = faster, more dynamic)
+**Voice generation fails:**
+- Verify API key and voice ID
+- Check account has credits
+- Try `MOCK_ELEVENLABS=true` to test flow
+- Review server logs for specific errors
+
+### Google OAuth Issues
+
+**Token expired:**
+- Regenerate `token.json` locally
+- Re-encode and update `GOOGLE_TOKEN_BASE64` in Vercel
+- Redeploy MCP server
 
 ## Project Structure
 
 ```
 .
-├── src/
-│   ├── main.py              # Main orchestration
-│   ├── config.py            # Settings and env vars
-│   ├── summarizer.py        # Text summary generation
-│   ├── mcp_client.py        # HTTP client for MCP server
-│   ├── models/              # Pydantic models
-│   └── utils/               # Helper functions
-├── mcp-server/              # MCP server (Next.js/TypeScript)
-│   ├── app/api/mcp/         # HTTP API endpoint
-│   └── src/tools/           # Tool implementations (calendar, gmail, notion, slack, etc.)
+├── src/                      # Python client
+│   ├── main.py               # Main orchestration
+│   ├── config.py             # Settings and env vars
+│   ├── summarizer.py         # Text summary generation
+│   ├── mcp_client.py         # MCP HTTP client
+│   ├── models/               # Pydantic models
+│   │   ├── calendar_models.py
+│   │   ├── email_models.py
+│   │   └── task_models.py
+│   ├── providers/            # Legacy (deprecated)
+│   └── utils/                # Helper functions
+│
+├── mcp-server/               # MCP server (Next.js/TypeScript)
+│   ├── app/
+│   │   └── api/mcp/
+│   │       └── route.ts      # MCP HTTP endpoint
+│   ├── lib/tools/            # Tool implementations
+│   │   ├── calendar.ts       # Google Calendar
+│   │   ├── gmail.ts          # Gmail
+│   │   ├── notion.ts         # Notion tasks
+│   │   ├── openai.ts         # Voice script generation
+│   │   ├── elevenlabs.ts     # TTS synthesis
+│   │   ├── slack.ts          # Slack messaging
+│   │   └── google-auth.ts    # OAuth helpers
+│   ├── src/tools/            # Duplicate (legacy)
+│   ├── test-mcp.js           # Test script
+│   ├── package.json
+│   └── vercel.json           # Vercel config
+│
 ├── .github/workflows/
-│   ├── run.yml              # GitHub Actions workflow (runs Python script)
-│   └── deploy-mcp-server.yml # Deploys MCP server to Vercel
-├── requirements.txt         # Python dependencies
-└── README.md               # This file
+│   ├── run.yml               # Daily brief workflow
+│   └── deploy-mcp-server.yml # Auto-deploy MCP to Vercel
+│
+├── requirements.txt          # Python dependencies
+├── test_full_flow.py         # End-to-end test
+└── README.md                 # This file
 ```
+
+## How It Works
+
+1. **GitHub Actions** triggers Python client daily at 06:30 UTC
+2. **Python client** (`src/main.py`):
+   - Connects to MCP server via HTTP
+   - Calls MCP tools to fetch data:
+     - `get_calendar_events` - Today's schedule
+     - `get_gmail_messages` - Recent emails
+     - `get_notion_tasks` - Due tasks
+   - Generates text summary
+   - Calls `generate_voice_script` (OpenAI)
+   - Calls `synthesize_speech` (ElevenLabs)
+   - Calls `post_to_slack` (text summary)
+   - Calls `upload_file_to_slack` (audio file)
+3. **MCP server** handles all API integrations
+4. **Slack** receives DM with text + audio attachment
+
+## Updating the MCP Server
+
+After making changes to `mcp-server/`:
+
+```bash
+cd mcp-server
+npm run build
+
+# Test locally first
+npm run dev
+
+# Deploy to Vercel
+npx vercel --prod
+```
+
+Or push to main branch - GitHub Actions auto-deploys via `.github/workflows/deploy-mcp-server.yml`
+
+## Security Notes
+
+- Never commit `.env`, `token.json`, or `client_secret.json`
+- Use GitHub Secrets for sensitive values
+- Use Vercel Environment Variables for server config
+- `token.json` should be regenerated if compromised
+- Keep API keys secure and rotate regularly
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make changes
+4. Test locally
+5. Submit pull request
 
 ## License
 
 MIT
+
+## Acknowledgments
+
+- **Model Context Protocol (MCP)** for standardized tool access
+- **Vercel** for serverless hosting
+- **Next.js** for MCP server framework
+- **ElevenLabs** for natural voice synthesis
+- **OpenAI** for voice script generation
