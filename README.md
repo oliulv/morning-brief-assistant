@@ -295,18 +295,15 @@ You can also trigger the workflow manually:
 │   ├── main.py              # Main orchestration
 │   ├── config.py            # Settings and env vars
 │   ├── summarizer.py        # Text summary generation
-│   ├── providers/
-│   │   ├── slack_client.py      # Slack API
-│   │   ├── google_client.py     # Google Calendar
-│   │   ├── gmail_client.py      # Gmail
-│   │   ├── notion_client.py     # Notion tasks
-│   │   ├── google_auth.py       # Google OAuth
-│   │   ├── tts_elevenlabs.py    # ElevenLabs TTS
-│   │   └── llm_openai.py        # OpenAI voice script
+│   ├── mcp_client.py        # HTTP client for MCP server
 │   ├── models/              # Pydantic models
 │   └── utils/               # Helper functions
+├── mcp-server/              # MCP server (Next.js/TypeScript)
+│   ├── app/api/mcp/         # HTTP API endpoint
+│   └── src/tools/           # Tool implementations (calendar, gmail, notion, slack, etc.)
 ├── .github/workflows/
-│   └── run.yml              # GitHub Actions workflow
+│   ├── run.yml              # GitHub Actions workflow (runs Python script)
+│   └── deploy-mcp-server.yml # Deploys MCP server to Vercel
 ├── requirements.txt         # Python dependencies
 └── README.md               # This file
 ```

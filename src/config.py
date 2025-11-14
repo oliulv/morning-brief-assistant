@@ -37,7 +37,6 @@ class Settings:
     elevenlabs_voice_id: Optional[str]
     elevenlabs_model_id: Optional[str]
     mock_elevenlabs: bool
-    debug_providers: bool
 
     @staticmethod
     def _strip_env(key: str, default: str | None = None) -> str | None:
@@ -86,7 +85,6 @@ class Settings:
         elevenlabs_voice_id = Settings._strip_env("ELEVENLABS_VOICE_ID")
         elevenlabs_model_id = Settings._strip_env("ELEVENLABS_MODEL_ID") or "eleven_multilingual_v2"
         mock_elevenlabs = (Settings._strip_env("MOCK_ELEVENLABS") or "false").lower() in {"1", "true", "yes"}
-        debug_providers = (Settings._strip_env("DEBUG_PROVIDERS") or "false").lower() in {"1", "true", "yes"}
 
         return Settings(
             mcp_server_url=mcp_server_url,
@@ -108,7 +106,6 @@ class Settings:
             elevenlabs_voice_id=elevenlabs_voice_id,
             elevenlabs_model_id=elevenlabs_model_id,
             mock_elevenlabs=mock_elevenlabs,
-            debug_providers=debug_providers,
         )
 
 
