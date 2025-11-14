@@ -130,16 +130,17 @@ export async function uploadFileToSlack(
     const fileSize = fileBuffer.length;
 
     // Step 1: Get upload URL from Slack
+    const uploadUrlParams = new URLSearchParams();
+    uploadUrlParams.append('filename', args.filename);
+    uploadUrlParams.append('length', fileSize.toString());
+
     const getUrlResponse = await fetch('https://slack.com/api/files.getUploadURLExternal', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: JSON.stringify({
-        filename: args.filename,
-        length: fileSize,
-      }),
+      body: uploadUrlParams,
     });
 
     const urlData = await getUrlResponse.json();

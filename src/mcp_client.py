@@ -40,7 +40,16 @@ class MCPClient:
                     },
                 },
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                error_body = ""
+                try:
+                    error_body = e.response.text
+                except Exception:  # noqa: BLE001
+                    error_body = "<unable to read body>"
+                logger.error("MCP HTTP error (%s): %s", e, error_body)
+                raise
             data = response.json()
             if "error" in data:
                 raise RuntimeError(f"MCP server error: {data['error']}")
