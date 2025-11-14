@@ -159,43 +159,75 @@ export const uploadFileToSlackTool = {
 
       const dmData = await dmResponse.json();
       if (!dmData.ok || !dmData.channel?.id) {
-        throw new Error("Failed to get Slack channel ID");
+        throw new Error(`Failed to get Slack channel ID: ${dmData.error || "Unknown error"}`);
       }
 
       const channelId = dmData.channel.id;
 
-      // Decode base64 file data in Cloudflare Workers
+      // Decode base64 file data
       const fileBytes = Uint8Array.from(atob(args.file_data), c => c.charCodeAt(0));
-      const fileBuffer = fileBytes.buffer;
+      const fileSize = fileBytes.length;
 
-      // Upload file using multipart form
-      const formData = new FormData();
-      formData.append("channels", channelId);
-      formData.append("file", new Blob([fileBuffer]), args.filename);
-      formData.append("title", args.title || args.filename);
-      if (args.initial_comment) {
-        formData.append("initial_comment", args.initial_comment);
-      }
-
-      const uploadResponse = await fetch("https://slack.com/api/files.upload", {
+      // Step 1: Get upload URL from Slack
+      const getUrlResponse = await fetch("https://slack.com/api/files.getUploadURLExternal", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-        body: formData,
+        body: JSON.stringify({
+          filename: args.filename,
+          length: fileSize,
+        }),
       });
 
-      const uploadData = await uploadResponse.json();
+      const urlData = await getUrlResponse.json();
+      if (!urlData.ok) {
+        throw new Error(`Failed to get upload URL: ${urlData.error || "Unknown error"}`);
+      }
 
-      if (!uploadData.ok) {
-        throw new Error(`Slack API error: ${uploadData.error || "Unknown error"}`);
+      // Step 2: Upload file to the provided URL
+      const uploadResponse = await fetch(urlData.upload_url, {
+        method: "POST",
+        body: fileBytes,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Failed to upload file: ${uploadResponse.statusText}`);
+      }
+
+      // Step 3: Complete the upload
+      const completeResponse = await fetch("https://slack.com/api/files.completeUploadExternal", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          files: [
+            {
+              id: urlData.file_id,
+              title: args.title || args.filename,
+            },
+          ],
+          channel_id: channelId,
+          initial_comment: args.initial_comment || "",
+        }),
+      });
+
+      const completeData = await completeResponse.json();
+      if (!completeData.ok) {
+        throw new Error(`Failed to complete upload: ${completeData.error || "Unknown error"}`);
       }
 
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify({ success: true, file_id: uploadData.file?.id }),
+            text: JSON.stringify({
+              success: true,
+              file_id: completeData.files?.[0]?.id || urlData.file_id,
+            }),
           },
         ],
       };

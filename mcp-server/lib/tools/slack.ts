@@ -120,89 +120,75 @@ export async function uploadFileToSlack(
 
     const dmData = await dmResponse.json();
     if (!dmData.ok || !dmData.channel?.id) {
-      throw new Error('Failed to get Slack channel ID');
+      throw new Error(`Failed to get Slack channel ID: ${dmData.error || 'Unknown error'}`);
     }
 
     const channelId = dmData.channel.id;
 
-    // Decode base64 file data in Node.js/Vercel
+    // Decode base64 file data
     const fileBytes = Uint8Array.from(atob(args.file_data), (c) => c.charCodeAt(0));
+    const fileSize = fileBytes.length;
 
-    // Use files.uploadV2 (newer API) or fall back to posting message with file
-    // files.upload is deprecated, so we'll use files.uploadV2
-    const formData = new FormData();
-    formData.append('channel_id', channelId);
-    formData.append('file', new Blob([fileBytes]), args.filename);
-    formData.append('filename', args.filename);
-    if (args.title) {
-      formData.append('title', args.title);
-    }
-    if (args.initial_comment) {
-      formData.append('initial_comment', args.initial_comment);
-    }
-
-    const uploadResponse = await fetch('https://slack.com/api/files.uploadV2', {
+    // Step 1: Get upload URL from Slack
+    const getUrlResponse = await fetch('https://slack.com/api/files.getUploadURLExternal', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
-      body: formData,
+      body: JSON.stringify({
+        filename: args.filename,
+        length: fileSize,
+      }),
     });
 
-    const uploadData = await uploadResponse.json();
+    const urlData = await getUrlResponse.json();
+    if (!urlData.ok) {
+      throw new Error(`Failed to get upload URL: ${urlData.error || 'Unknown error'}`);
+    }
 
-    // If uploadV2 fails for any reason, fallback to legacy files.upload
-    // uploadV2 might not be available for all workspaces
-    if (!uploadData.ok) {
-      // Fallback to legacy files.upload (even though deprecated, it still works)
-      const legacyFormData = new FormData();
-      legacyFormData.append('channels', channelId);
-      legacyFormData.append('file', new Blob([fileBytes]), args.filename);
-      legacyFormData.append('title', args.title || args.filename);
-      if (args.initial_comment) {
-        legacyFormData.append('initial_comment', args.initial_comment);
-      }
+    // Step 2: Upload file to the provided URL
+    const uploadResponse = await fetch(urlData.upload_url, {
+      method: 'POST',
+      body: fileBytes,
+    });
 
-      const legacyResponse = await fetch('https://slack.com/api/files.upload', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: legacyFormData,
-      });
+    if (!uploadResponse.ok) {
+      throw new Error(`Failed to upload file: ${uploadResponse.statusText}`);
+    }
 
-      const legacyData = await legacyResponse.json();
-      if (!legacyData.ok) {
-        // Even if deprecated, it might still work - check if file was uploaded despite error
-        // Slack may return method_deprecated as error but still upload the file
-        if ((legacyData.error === 'method_deprecated' || legacyData.warning === 'method_deprecated') && legacyData.file) {
-          // It worked despite deprecation warning/error
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({ success: true, file_id: legacyData.file.id }),
-              },
-            ],
-          };
-        }
-        throw new Error(`Slack API error: ${legacyData.error || 'Unknown error'}`);
-      }
-      return {
-        content: [
+    // Step 3: Complete the upload
+    const completeResponse = await fetch('https://slack.com/api/files.completeUploadExternal', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        files: [
           {
-            type: 'text',
-            text: JSON.stringify({ success: true, file_id: legacyData.file?.id }),
+            id: urlData.file_id,
+            title: args.title || args.filename,
           },
         ],
-      };
+        channel_id: channelId,
+        initial_comment: args.initial_comment || '',
+      }),
+    });
+
+    const completeData = await completeResponse.json();
+    if (!completeData.ok) {
+      throw new Error(`Failed to complete upload: ${completeData.error || 'Unknown error'}`);
     }
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ success: true, file_id: uploadData.file?.id || uploadData.id }),
+          text: JSON.stringify({
+            success: true,
+            file_id: completeData.files?.[0]?.id || urlData.file_id,
+          }),
         },
       ],
     };
