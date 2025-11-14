@@ -165,8 +165,8 @@ export const uploadFileToSlackTool = {
       const channelId = dmData.channel.id;
 
       // Decode base64 file data
-      const fileBytes = Uint8Array.from(atob(args.file_data), c => c.charCodeAt(0));
-      const fileSize = fileBytes.length;
+      const fileBuffer = Buffer.from(args.file_data, "base64");
+      const fileSize = fileBuffer.length;
 
       // Step 1: Get upload URL from Slack
       const getUrlResponse = await fetch("https://slack.com/api/files.getUploadURLExternal", {
@@ -189,7 +189,7 @@ export const uploadFileToSlackTool = {
       // Step 2: Upload file to the provided URL
       const uploadResponse = await fetch(urlData.upload_url, {
         method: "POST",
-        body: fileBytes,
+        body: fileBuffer,
       });
 
       if (!uploadResponse.ok) {
